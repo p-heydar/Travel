@@ -1,0 +1,21 @@
+# This is a generated file. Not intended for manual editing.
+services:
+  travel:
+    build:
+      context: "R:\\Projects\\GitHub\\Travel"
+      dockerfile: "Travel/Dockerfile"
+      target: "base"
+    command: []
+    entrypoint:
+    - "dotnet"
+    - "/app/bin/Debug/net9.0/Travel.dll"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    image: "travel:dev"
+    ports: []
+    volumes:
+    - "R:\\Projects\\GitHub\\Travel\\Travel:/app:rw"
+    - "R:\\Projects\\GitHub\\Travel:/src:rw"
+    - "C:\\Users\\Pouya\\.nuget\\packages:/home/app/.nuget/packages"
+    working_dir: "/app"

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Neo4j.Driver;
 using Scalar.AspNetCore;
 using Travel.Domain.Entities.Cities;
+using Path = System.IO.Path;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,13 +28,13 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.MapPost("/city",async ([FromBody] List<City> cities, IDriver driver, CancellationToken cancellationToken) =>
+app.MapPost("/City",async ([FromBody] List<City> cities, IDriver driver, CancellationToken cancellationToken) =>
 {
     await using var session = driver.AsyncSession();
 
     foreach (City city in cities)
     {
-        var insertQuery = @"
+        var insertCommand = @"
 
                             CREATE (city:City {
                                 name: $name,
@@ -46,7 +47,7 @@ app.MapPost("/city",async ([FromBody] List<City> cities, IDriver driver, Cancell
                                 transportation: $transportation
                             })
                           ";
-        await session.RunAsync(insertQuery, new
+        await session.RunAsync(insertCommand, new
         {
             name = city.name,
             population = city.population,
@@ -65,11 +66,13 @@ app.MapPost("/city",async ([FromBody] List<City> cities, IDriver driver, Cancell
 });
 
 
-app.MapGet("/GetAll", async (IDriver driver) =>
+app.MapGet("/City", async (IDriver driver, string filter) =>
 {
     await using var session = driver.AsyncSession();
     var getAllQuery = @"
                         MATCH (city:City)
+                        WHERE
+                            city.name CONTAINS $filter
                         RETURN 
                             city.name AS name, 
                             city.population AS population,
@@ -80,26 +83,65 @@ app.MapGet("/GetAll", async (IDriver driver) =>
                             city.peakTravelTime AS peakTravelTime,
                             city.transportation AS transportation
                       ";
-    var result = await session.RunAsync(getAllQuery);
+    var result = await session.RunAsync(getAllQuery, new
+    {
+        filter=filter
+    });
 
     List<City> cities = new List<City>();
     
     await result.ForEachAsync(record =>
     {
-        cities.Add(new(record["name"] as string, long.Parse(record["population"].ToString()), 
-            record["country"] as string, record["livingCost"] as string, int.Parse(record["numberOfAirports"].ToString()),
-            record["localLanguage"] as string, record["peakTravelTime"] as string, record["transportation"] as string));
+        cities.Add(new(record["name"] as string,
+            long.Parse(record["population"].ToString()),
+            record["country"] as string,
+            record["livingCost"] as string,
+            int.Parse(record["numberOfAirports"].ToString()),
+            record["localLanguage"] as string,
+            record["peakTravelTime"] as string,
+            record["transportation"] as string));
     });
     
     return Results.Ok(cities);
 
 });
 
-app.MapGet("/", async (IDriver driver) =>
+app.MapPost("/Path",
+    async (IDriver driver, string source, string destination, int distance) =>
+    {
+        var addPathCommand = @"
+                               MATCH (source:City{name:$source}), (destination:City{name:$destination})
+                               MERGE (source)-[road:Road{distance:$distance}]->(destination)
+                           ";
+
+        await using var session = driver.AsyncSession();
+        session.RunAsync(addPathCommand, new
+        {
+            source = source, destination = destination, distance = distance
+        });
+        return Results.Ok();
+    });
+
+
+app.MapGet("/Path", async (IDriver driver) =>
 {
+    await using var session = driver.AsyncSession();
+    var getAllQuery = @"
+                        MATCH (source:City)-[road:Road]->(destination:City)
+                        RETURN source.name AS SourceName, road.distance As Distance, destination.name AS DestinationName
+                      ";
+    var result = await session.RunAsync(getAllQuery);
 
-});
+    List<TravelPath> travelPaths = new List<TravelPath>();
     
-
+    await result.ForEachAsync(record =>
+    {
+        travelPaths.Add(new TravelPath(record["SourceName"].As<string>(),
+                record["Distance"].As<int>(),
+                record["DestinationName"].As<string>()));
+    });
+    
+    return Results.Ok(travelPaths);
+});
 
 app.Run();
